@@ -42,6 +42,32 @@ print("[DEBUG v1.0.0] Loading camel model...")
 - Include version in debug output
 - Bump version on any change
 
+## Code Quality Rules
+
+### Single Source of Truth - No Magic Numbers
+Calculate values from actual data, don't hardcode:
+
+```lua
+-- ❌ WRONG: Magic numbers
+local OFFSET_UP = 3  -- Why 3? What if camel size changes?
+
+-- ✅ CORRECT: Calculate from geometry
+local lowestY = math.huge
+for _, part in ipairs(model:GetChildren()) do
+    if part:IsA("BasePart") then
+        lowestY = math.min(lowestY, part.Position.Y - part.Size.Y/2)
+    end
+end
+local bodyToGround = body.Position.Y - lowestY
+local OFFSET_UP = bodyToGround + 0.1  -- Calculated + small clearance
+```
+
+Benefits:
+- Works if model size changes
+- Self-documenting (shows intent)
+- Single source of truth (geometry)
+- Logs actual values for debugging
+
 ## Overview
 
 This project uses a unified CLI workflow (`animate.sh`) that allows Claude Code to:
@@ -420,11 +446,12 @@ camel.Parent = workspace
 - Controllable - adjust colors/sizes in real-time
 - Animated - direct position changes in loops
 
-**MCP Animation Caveats:**
+**MCP Caveats:**
 
 1. ❌ `TweenService` does NOT work (Command Bar doesn't update tweens)
 2. ❌ `WeldConstraints` don't follow when you set `Position` directly (bypasses physics)
 3. ✅ Must move ALL parts together in the loop
+4. ⚠️ `RunService:IsRunning()` always returns `false` - MCP runs in Command Bar context which is always Edit mode, even when Play mode is active
 
 ```lua
 -- WRONG: Only moves body, other parts left behind!
