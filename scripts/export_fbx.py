@@ -94,21 +94,31 @@ def export_workflow(object_names, output_path, skip_validation=False):
     """Complete export workflow with validation."""
     objects = []
 
-    # Collect and validate objects
-    for obj_name in object_names:
-        obj = bpy.data.objects.get(obj_name)
+    # If no object names specified, export all meshes and armatures
+    if object_names is None:
+        print("Auto-detecting objects to export...")
+        for obj in bpy.data.objects:
+            if obj.type in ('MESH', 'ARMATURE'):
+                objects.append(obj)
+                print(f"  + {obj.name} ({obj.type})")
+        if not objects:
+            raise ValueError("No meshes or armatures found in scene")
+    else:
+        # Collect and validate specified objects
+        for obj_name in object_names:
+            obj = bpy.data.objects.get(obj_name)
 
-        if obj is None:
-            raise ValueError(f"Object '{obj_name}' not found in scene")
+            if obj is None:
+                raise ValueError(f"Object '{obj_name}' not found in scene")
 
-        objects.append(obj)
+            objects.append(obj)
 
-        if not skip_validation:
-            # Apply transforms
-            apply_transforms(obj)
-
-            # Validate
-            validate_mesh(obj)
+    # Validate and apply transforms
+    if not skip_validation:
+        for obj in objects:
+            if obj.type == 'MESH':
+                apply_transforms(obj)
+                validate_mesh(obj)
 
     # Export
     export_to_fbx(objects, output_path)
@@ -140,8 +150,8 @@ def main():
     parser.add_argument(
         "--objects",
         nargs='+',
-        required=True,
-        help="Names of objects to export"
+        default=None,
+        help="Names of objects to export (default: all meshes)"
     )
     parser.add_argument(
         "--output",

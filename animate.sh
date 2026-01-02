@@ -63,6 +63,9 @@ Commands:
   full <name>                Full workflow: create + animate + render + video
   verify <name> [interval]   Show frames for Claude to verify (every Nth frame)
   clean <name>               Clean up rendered files for scene
+  export <name>              Export FBX for Roblox
+  upload <name>              Upload FBX to Roblox Cloud (requires .env)
+  roblox <name>              Full Roblox workflow: export + upload
 
 Options:
   --engine <ENGINE>          Render engine: EEVEE, CYCLES (default: $DEFAULT_ENGINE)
@@ -162,6 +165,8 @@ CREATE_SCRIPT="$SCRIPTS_DIR/create_${SCENE_NAME}.py"
 ANIMATE_SCRIPT="$SCRIPTS_DIR/animate_${SCENE_NAME}_walk.py"
 OUTPUT_DIR="$RENDERS_DIR/$SCENE_NAME"
 VIDEO_FILE="$RENDERS_DIR/${SCENE_NAME}_walking.mp4"
+FBX_FILE="exports/${SCENE_NAME}.fbx"
+EXPORTS_DIR="exports"
 
 # Functions for each command
 
@@ -303,6 +308,79 @@ cmd_clean() {
     log_success "Cleanup complete"
 }
 
+cmd_export() {
+    log_info "Exporting FBX: $SCENE_NAME"
+
+    if [ ! -f "$BLEND_FILE" ]; then
+        log_error "Scene file not found: $BLEND_FILE"
+        exit 1
+    fi
+
+    mkdir -p "$EXPORTS_DIR"
+
+    $BLENDER -b "$BLEND_FILE" --python "$SCRIPTS_DIR/export_fbx.py" -- \
+        --output "$FBX_FILE"
+
+    if [ -f "$FBX_FILE" ]; then
+        FBX_SIZE=$(ls -lh "$FBX_FILE" | awk '{print $5}')
+        log_success "Exported: $FBX_FILE ($FBX_SIZE)"
+    else
+        log_error "FBX export failed"
+        exit 1
+    fi
+}
+
+cmd_upload() {
+    log_info "Uploading to Roblox Cloud: $SCENE_NAME"
+
+    if [ ! -f "$FBX_FILE" ]; then
+        log_error "FBX file not found: $FBX_FILE"
+        log_info "Run: $0 export $SCENE_NAME"
+        exit 1
+    fi
+
+    # Load environment
+    if [ -f ".env" ]; then
+        source .env
+    else
+        log_error ".env file not found"
+        log_info "Create .env with ROBLOX_API_KEY"
+        exit 1
+    fi
+
+    if [ -z "$ROBLOX_API_KEY" ]; then
+        log_error "ROBLOX_API_KEY not set in .env"
+        exit 1
+    fi
+
+    log_info "Uploading via rbxcloud..."
+    RESULT=$(rbxcloud assets create model-fbx "$FBX_FILE" \
+        --api-key "$ROBLOX_API_KEY" \
+        --description "$SCENE_NAME animated model from Blender" 2>&1)
+
+    echo "$RESULT"
+
+    if echo "$RESULT" | grep -q "assetId"; then
+        log_success "Upload complete!"
+        log_info "Asset ID in output above"
+    else
+        log_warning "Check output for status"
+    fi
+}
+
+cmd_roblox() {
+    log_info "=== Roblox Workflow: $SCENE_NAME ==="
+    echo ""
+
+    cmd_export
+    echo ""
+
+    cmd_upload
+    echo ""
+
+    log_success "=== Roblox Workflow Complete ==="
+}
+
 cmd_full() {
     log_info "=== Full Workflow: $SCENE_NAME ==="
     echo ""
@@ -357,6 +435,15 @@ case $COMMAND in
         ;;
     clean)
         cmd_clean
+        ;;
+    export)
+        cmd_export
+        ;;
+    upload)
+        cmd_upload
+        ;;
+    roblox)
+        cmd_roblox
         ;;
     *)
         log_error "Unknown command: $COMMAND"
