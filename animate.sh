@@ -64,8 +64,9 @@ Commands:
   verify <name> [interval]   Show frames for Claude to verify (every Nth frame)
   clean <name>               Clean up rendered files for scene
   export <name>              Export FBX for Roblox
-  upload <name>              Upload FBX to Roblox Cloud (requires .env)
-  roblox <name>              Full Roblox workflow: export + upload
+  bake <name>                Bake PBR textures (ColorMap, NormalMap, etc.)
+  upload <name>              Upload FBX + textures to Roblox Cloud
+  deploy <name>              Full pipeline: export + bake + upload + output MCP commands
 
 Options:
   --engine <ENGINE>          Render engine: EEVEE, CYCLES (default: $DEFAULT_ENGINE)
@@ -330,21 +331,37 @@ cmd_export() {
     fi
 }
 
-cmd_upload() {
-    log_info "Uploading to Roblox Cloud: $SCENE_NAME"
+cmd_bake() {
+    log_info "Baking PBR textures: $SCENE_NAME"
 
-    if [ ! -f "$FBX_FILE" ]; then
-        log_error "FBX file not found: $FBX_FILE"
-        log_info "Run: $0 export $SCENE_NAME"
+    if [ ! -f "$BLEND_FILE" ]; then
+        log_error "Scene file not found: $BLEND_FILE"
         exit 1
     fi
+
+    TEXTURE_DIR="$EXPORTS_DIR/textures"
+    mkdir -p "$TEXTURE_DIR"
+
+    # Bake for Body (main mesh) - can be extended for multiple objects
+    $BLENDER -b "$BLEND_FILE" --python "$SCRIPTS_DIR/bake_pbr.py" -- \
+        --object "Body" \
+        --output "$TEXTURE_DIR" \
+        --resolution 1024
+
+    log_success "PBR textures baked to: $TEXTURE_DIR"
+}
+
+cmd_upload() {
+    log_info "Uploading to Roblox Cloud: $SCENE_NAME"
 
     # Load environment
     if [ -f ".env" ]; then
         source .env
+        export ROBLOX_API_KEY
+        export ROBLOX_CREATOR_ID
     else
         log_error ".env file not found"
-        log_info "Create .env with ROBLOX_API_KEY"
+        log_info "Create .env with ROBLOX_API_KEY, ROBLOX_CREATOR_ID"
         exit 1
     fi
 
@@ -353,32 +370,37 @@ cmd_upload() {
         exit 1
     fi
 
-    log_info "Uploading via rbxcloud..."
-    RESULT=$(rbxcloud assets create model-fbx "$FBX_FILE" \
-        --api-key "$ROBLOX_API_KEY" \
-        --description "$SCENE_NAME animated model from Blender" 2>&1)
+    # Use Python upload script
+    python3 "$SCRIPTS_DIR/upload_to_roblox.py" \
+        --scene "$SCENE_NAME" \
+        --exports-dir "$EXPORTS_DIR" \
+        --output "$EXPORTS_DIR/${SCENE_NAME}_assets.json"
 
-    echo "$RESULT"
-
-    if echo "$RESULT" | grep -q "assetId"; then
-        log_success "Upload complete!"
-        log_info "Asset ID in output above"
-    else
-        log_warning "Check output for status"
+    if [ -f "$EXPORTS_DIR/${SCENE_NAME}_assets.json" ]; then
+        log_success "Asset IDs saved to: $EXPORTS_DIR/${SCENE_NAME}_assets.json"
     fi
 }
 
-cmd_roblox() {
-    log_info "=== Roblox Workflow: $SCENE_NAME ==="
+cmd_deploy() {
+    log_info "=== Full Deploy Pipeline: $SCENE_NAME ==="
     echo ""
 
+    log_info "Step 1/3: Export FBX"
     cmd_export
     echo ""
 
+    log_info "Step 2/3: Bake PBR Textures"
+    cmd_bake
+    echo ""
+
+    log_info "Step 3/3: Upload to Roblox Cloud"
     cmd_upload
     echo ""
 
-    log_success "=== Roblox Workflow Complete ==="
+    log_success "=== Deploy Complete ==="
+    echo ""
+    log_info "Next: Use MCP to setup model in Studio"
+    log_info "Asset IDs in: $EXPORTS_DIR/${SCENE_NAME}_assets.json"
 }
 
 cmd_full() {
@@ -439,11 +461,14 @@ case $COMMAND in
     export)
         cmd_export
         ;;
+    bake)
+        cmd_bake
+        ;;
     upload)
         cmd_upload
         ;;
-    roblox)
-        cmd_roblox
+    deploy)
+        cmd_deploy
         ;;
     *)
         log_error "Unknown command: $COMMAND"

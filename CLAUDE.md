@@ -10,10 +10,12 @@ This document explains how Claude Code works with this 3D animation pipeline.
 
 | Subsystem | Version | Description |
 |-----------|---------|-------------|
-| animate.sh | 1.1.0 | Unified Blender CLI with Roblox export |
+| animate.sh | 1.2.0 | Unified CLI with deploy command |
 | create_baby_camel.py | 1.0.0 | Procedural baby camel model |
 | animate_baby_camel_walk.py | 1.0.0 | Walk cycle animation |
 | export_fbx.py | 1.1.0 | FBX export with auto-detect |
+| upload_to_roblox.py | 1.0.0 | Upload FBX + textures to Cloud |
+| CamelSetup.luau | 1.0.0 | MCP helper for SurfaceAppearance |
 | MCP Explorer | 1.0.0 | Workspace exploration via MCP |
 | Rojo Config | 1.0.0 | Default project structure |
 
@@ -391,34 +393,38 @@ mcp__roblox-studio__run_code    # Execute Luau code in Studio
 mcp__roblox-studio__insert_model # Insert marketplace models
 ```
 
-### Blender → Roblox Workflow
+### Blender → Roblox Workflow (Automated)
 
-**Step 1: Create & Render in Blender**
+**One Command Deploy:**
 ```bash
-./animate.sh full baby_camel --samples 64
-./animate.sh verify baby_camel 10
+./animate.sh deploy baby_camel
+# 1. Exports FBX
+# 2. Bakes PBR textures
+# 3. Uploads to Roblox Cloud
+# 4. Saves asset IDs to exports/baby_camel_assets.json
 ```
 
-**Step 2: Export FBX from Blender**
+**Manual Steps (if needed):**
 ```bash
-./animate.sh export baby_camel
-# Creates: exports/baby_camel.fbx
+./animate.sh export baby_camel    # Export FBX only
+./animate.sh bake baby_camel      # Bake PBR textures only
+./animate.sh upload baby_camel    # Upload to Cloud only
 ```
 
-**Step 3: Upload to Roblox Cloud**
-```bash
-source .env
-rbxcloud assets create model-fbx exports/baby_camel.fbx \
-  --api-key "$ROBLOX_API_KEY" \
-  --description "Baby camel walking animation"
-```
-
-**Step 4: Insert into Studio (via MCP)**
+**After Upload - Insert via MCP:**
 ```lua
--- Claude runs this via MCP
-local AssetService = game:GetService("AssetService")
-local model = AssetService:LoadAsset(ASSET_ID):GetChildren()[1]
-model.Parent = workspace
+-- Claude runs this after getting asset IDs from deploy
+local CamelSetup = require(game.ReplicatedStorage.Shared.CamelSetup)
+
+-- Asset IDs from upload_to_roblox.py output
+local textures = {
+    ColorMap = "rbxassetid://123456",
+    NormalMap = "rbxassetid://123457",
+    RoughnessMap = "rbxassetid://123458"
+}
+
+-- Insert and setup with one call
+local model = CamelSetup.insertAndSetup("MODEL_ASSET_ID", textures, Vector3.new(0, 5, 0))
 ```
 
 ### rbxcloud Commands
@@ -512,3 +518,8 @@ print("Created: " .. part.Name)
   - Rojo project initialized
   - Debugging rules documented
   - Subsystem versioning added
+- **v0.3.0** (2026-01-02): Automated deploy pipeline
+  - `./animate.sh deploy` - one command export + bake + upload
+  - `upload_to_roblox.py` - automated asset upload
+  - `CamelSetup.luau` - MCP helper for SurfaceAppearance
+  - No more manual texture upload steps!
