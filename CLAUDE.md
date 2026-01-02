@@ -1,0 +1,326 @@
+# Claude Code Workflow Guide
+
+This document explains how Claude Code works with this 3D animation pipeline.
+
+## Overview
+
+This project uses a unified CLI workflow (`animate.sh`) that allows Claude Code to:
+1. Create 3D scenes procedurally with Python
+2. Apply animations
+3. Render to PNG frames
+4. Generate MP4 videos
+5. **Read and verify frames** using the Read tool
+
+## The Workflow Script
+
+### `./animate.sh` - Unified CLI Tool
+
+The master script orchestrates the entire animation pipeline.
+
+**Core Commands:**
+```bash
+./animate.sh create <name>       # Create scene
+./animate.sh animate <name>      # Apply animation
+./animate.sh render <name>       # Render frames
+./animate.sh video <name>        # Generate MP4
+./animate.sh full <name>         # Complete workflow
+./animate.sh verify <name> [N]   # List frames for Claude to read
+./animate.sh clean <name>        # Clean up renders
+```
+
+**Options:**
+```bash
+--engine <ENGINE>           # EEVEE (fast) or CYCLES (quality)
+--samples <N>               # Render samples (default: 64)
+--fps <N>                   # Frames per second (default: 24)
+--start <N> --end <N>       # Frame range
+--resolution <W> <H>        # Output resolution
+--force                     # Overwrite existing files
+--no-video                  # Skip video generation
+```
+
+## Claude Code Workflow Pattern
+
+### Pattern: Create & Verify Animation
+
+**Step 1: Create the animation**
+```bash
+./animate.sh full baby_camel --samples 64
+```
+
+**Step 2: Verify with Claude**
+```bash
+./animate.sh verify baby_camel 10
+```
+
+This outputs a list of frame paths (every 10th frame). Claude can then use the **Read tool** to view each frame and verify:
+- All body parts moving together
+- No separation/stretching bugs
+- Animation looks correct
+- Quality is acceptable
+
+**Step 3: Iterate if needed**
+If Claude finds bugs:
+1. Fix the Python animation script
+2. Re-run: `./animate.sh full baby_camel --force`
+3. Verify again: `./animate.sh verify baby_camel 10`
+4. Repeat until all P0 bugs resolved
+
+### Pattern: High Quality Final Render
+
+After verification passes:
+```bash
+./animate.sh render baby_camel \
+  --engine CYCLES \
+  --samples 256 \
+  --resolution 2560 1440 \
+  --force
+
+./animate.sh video baby_camel
+```
+
+## How Claude Reads Frames
+
+Claude Code's **Read tool** can read images directly. This enables:
+
+1. **Visual verification** - Claude sees exactly what the user sees
+2. **Bug detection** - Claude can spot animation issues (separation, clipping, etc.)
+3. **Quality assessment** - Claude can evaluate render quality
+4. **Frame-by-frame analysis** - Compare sequential frames for smooth motion
+
+### Example Verification Flow
+
+```bash
+# After rendering
+$ ./animate.sh verify baby_camel 15
+
+# Output:
+renders/baby_camel/frame_0001.png
+renders/baby_camel/frame_0015.png
+renders/baby_camel/frame_0030.png
+renders/baby_camel/frame_0045.png
+renders/baby_camel/frame_0060.png
+```
+
+Claude then uses the Read tool on each path to visually inspect frames.
+
+## Project Structure
+
+```
+rig/
+├── animate.sh              # Master workflow script (USE THIS!)
+├── assets/                 # Source .blend files (git ignored)
+├── scripts/
+│   ├── create_*.py        # Scene creation scripts
+│   ├── animate_*_walk.py  # Animation scripts
+│   ├── bake_pbr.py        # PBR texture baking
+│   ├── export_fbx.py      # FBX export for Roblox
+│   └── batch_render.py    # Headless rendering
+├── renders/               # Output frames & videos (git ignored)
+├── docs/                  # Documentation
+└── CLAUDE.md             # This file
+```
+
+## Creating New Animations
+
+### 1. Create Scene Script
+
+`scripts/create_my_model.py`:
+```python
+import bpy
+
+def create_model():
+    # Create your 3D model here
+    pass
+
+def main():
+    create_model()
+    bpy.ops.wm.save_as_mainfile(filepath="assets/my_model.blend")
+
+if __name__ == "__main__":
+    main()
+```
+
+### 2. Create Animation Script
+
+`scripts/animate_my_model_walk.py`:
+```python
+import bpy
+import math
+
+def create_walk_cycle():
+    scene = bpy.context.scene
+    scene.frame_start = 1
+    scene.frame_end = 60
+
+    # Get all objects that need animation
+    body = bpy.data.objects.get("Body")
+
+    for frame in range(1, 61):
+        scene.frame_set(frame)
+        forward_offset = (frame / 60.0) * 3.0
+
+        # IMPORTANT: Animate ALL objects' X position!
+        # Missing even one object causes separation bugs
+        if body:
+            body.location.x = forward_offset
+            body.keyframe_insert(data_path="location", frame=frame)
+
+        # ... animate other parts ...
+
+def main():
+    create_walk_cycle()
+    bpy.ops.wm.save_mainfile()
+
+if __name__ == "__main__":
+    main()
+```
+
+### 3. Run the Workflow
+
+```bash
+./animate.sh full my_model --samples 64
+./animate.sh verify my_model 10
+```
+
+## Common Patterns
+
+### Quick Preview
+```bash
+./animate.sh render my_scene \
+  --engine EEVEE \
+  --samples 32 \
+  --end 30 \
+  --force
+```
+
+### Production Quality
+```bash
+./animate.sh render my_scene \
+  --engine CYCLES \
+  --samples 256 \
+  --resolution 3840 2160 \
+  --force
+```
+
+### Test Single Frame
+```bash
+./animate.sh render my_scene \
+  --start 30 \
+  --end 30 \
+  --no-video
+```
+
+### Batch Verification
+```bash
+# Check every 5th frame
+./animate.sh verify my_scene 5 > frames_to_check.txt
+
+# Claude reads each frame listed
+```
+
+## Critical Animation Bug Classes
+
+### P0: Body Parts Left Behind
+
+**Symptom:** Body parts stay at original position while others move forward
+
+**Cause:** Forgetting to animate X position for some objects
+
+**Fix:** Ensure EVERY object has `location.x = base_x + forward_offset`
+
+**Detection:** Use `verify` command - Claude compares frames to spot separation
+
+### Example Bug Fix Pattern
+
+```python
+# ❌ WRONG - only animates Z (height)
+leg.location.z = 0.5 + lift
+leg.keyframe_insert(data_path="location", frame=frame)
+
+# ✅ CORRECT - animates both X (forward) and Z (height)
+leg.location.x = base_x + forward_offset + swing
+leg.location.z = 0.5 + lift
+leg.keyframe_insert(data_path="location", frame=frame)
+```
+
+## Environment Variables
+
+```bash
+# Custom Blender path
+export BLENDER_BIN=/opt/homebrew/bin/blender
+
+# Then use normally
+./animate.sh full my_scene
+```
+
+## Integration with Other Tools
+
+### Export to Roblox
+```bash
+# After animation verified
+blender -b assets/my_model.blend --python scripts/bake_pbr.py -- \
+  --object "Body" \
+  --output exports/textures \
+  --resolution 2048
+
+blender -b assets/my_model.blend --python scripts/export_fbx.py -- \
+  --objects "Body" "Armature" \
+  --output exports/my_model.fbx
+```
+
+### Git Workflow
+```bash
+# Renders are git ignored automatically
+./animate.sh full my_scene
+
+# Only commit source files
+git add scripts/create_my_scene.py
+git add scripts/animate_my_scene_walk.py
+git commit -m "Add my_scene animation"
+```
+
+## Tips for Working with Claude Code
+
+1. **Always verify after rendering** - Use `verify` command and let Claude read frames
+2. **Start with low samples** - Use EEVEE with 32-64 samples for iteration
+3. **Increment verification interval** - Use `verify <name> 15` for faster checks
+4. **Use --force liberally** - Don't hesitate to re-render during iteration
+5. **Test single frames first** - Use `--start 1 --end 1` to test quickly
+
+## Troubleshooting
+
+### "Scene file not found"
+Run `create` command first: `./animate.sh create my_scene`
+
+### "Animation script not found"
+Create `scripts/animate_my_scene_walk.py` following the pattern above
+
+### "Frames directory not found"
+Run `render` command first: `./animate.sh render my_scene`
+
+### Separation bugs after rendering
+1. Check animation script - ensure ALL objects have X animation
+2. List all objects in scene: `blender -b assets/scene.blend --python-expr "import bpy; print([o.name for o in bpy.data.objects])"`
+3. Add missing objects to animation loop
+
+## Best Practices
+
+✅ **DO:**
+- Use `full` command for complete workflow
+- Verify with Claude before final high-quality render
+- Start with low samples (32-64) for iteration
+- Use descriptive scene names
+- Clean up old renders with `clean` command
+
+❌ **DON'T:**
+- Skip verification step
+- Commit render files to git (they're ignored)
+- Use high samples during iteration
+- Forget to animate all object positions
+- Hard-code file paths in scripts
+
+## Version History
+
+- **2026-01-02**: Initial workflow script created
+- Baby camel walking animation - first complete workflow test

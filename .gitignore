@@ -1,14 +1,133 @@
-# A fast, small, safe, gradually typed embeddable scripting language derived from Lua
-#
-# https://github.com/luau-lang/luau
-# https://luau.org/
+# ===========================================
+# SECRETS AND CREDENTIALS - NEVER COMMIT
+# ===========================================
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+*.keystore
+credentials.json
+secrets.json
+secret.yaml
+*.secret
+*_secret.*
+*_secrets.*
+api_keys.*
+.aws/
+.ssh/id_*
+.ssh/*.pem
 
-# Code coverage
+# ===========================================
+# LARGE FILES - BLENDER AND MEDIA
+# ===========================================
+# Blender source files (use Git LFS if needed)
+*.blend
+*.blend1
+*.blend2
+*.blend@
+
+# Rendered outputs and generated media
+renders/
+exports/
+output/
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.gif
+*.png
+*.jpg
+*.jpeg
+*.tiff
+*.exr
+*.hdr
+
+# Exceptions: Allow small documentation images in docs/
+!docs/**/*.png
+!docs/**/*.jpg
+!docs/**/*.gif
+
+# Audio files
+*.wav
+*.mp3
+*.ogg
+*.flac
+
+# ===========================================
+# PYTHON
+# ===========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+*.egg-info/
+dist/
+build/
+
+# ===========================================
+# IDE AND EDITORS
+# ===========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# ===========================================
+# OS GENERATED
+# ===========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ===========================================
+# TEMPORARY AND CACHE
+# ===========================================
+*.tmp
+*.temp
+.cache/
+*.bak
+*.backup
+~*
+
+# ===========================================
+# LOGS AND DATABASES
+# ===========================================
+*.log
+*.sql
+*.sqlite
+*.db
+
+# ===========================================
+# COMPRESSED ARCHIVES
+# ===========================================
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# ===========================================
+# PREVIOUS PROJECT ENTRIES
+# ===========================================
 coverage.out
-
-# Profiling
 profile.out
 profile.svg
-
-# Time trace
 trace.json
