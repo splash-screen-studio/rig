@@ -561,6 +561,28 @@ part.Parent = workspace
 print("Created: " .. part.Name)
 ```
 
+## Publish Tracking
+
+When publishing to Roblox, maintain a mapping in `PUBLISH_LOG.md`:
+
+```markdown
+| Publish Timestamp (UTC) | Commit Hash | Tag | Notes |
+|-------------------------|-------------|-----|-------|
+| 2026-01-02 ~21:50 | 4630b4a | v1.3.5 | Description |
+```
+
+**Workflow:**
+1. Commit and tag your changes
+2. Publish to Roblox via Studio (File → Publish to Roblox)
+3. Add entry to `PUBLISH_LOG.md` with current timestamp and commit hash
+
+**Get current commit hash:**
+```bash
+git rev-parse --short HEAD
+```
+
+**Note:** `rbxcloud universe get` has a parsing bug with age ratings, so we track publishes manually.
+
 ## Version History
 
 - **v0.1.0** (2026-01-02): Initial workflow - baby camel animation
