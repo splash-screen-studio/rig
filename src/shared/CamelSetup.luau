@@ -1,11 +1,14 @@
 --[[
-    CamelSetup v1.0.0
-    Helper module for setting up imported models with PBR textures.
-    Used by Claude via MCP after uploading assets.
+    CamelSetup v1.1.0
+    Helper module for creating and animating baby camel.
+    Used by Claude via MCP.
+
+    IMPORTANT: TweenService does NOT work in MCP context!
+    Use direct position changes in loops instead.
 ]]
 
 local CamelSetup = {}
-CamelSetup.VERSION = "1.0.0"
+CamelSetup.VERSION = "1.1.0"
 
 -- Log with version
 local function log(msg)
@@ -100,6 +103,89 @@ function CamelSetup.insertAndSetup(modelAssetId, textures, position)
     end
 
     return nil
+end
+
+-- Walk animation using direct position changes (MCP compatible)
+function CamelSetup.walk(model, distance, options)
+    options = options or {}
+    local steps = options.steps or 60
+    local stepDelay = options.stepDelay or 0.05
+    local bobHeight = options.bobHeight or 0.3
+
+    local body = model:FindFirstChild("Body") or model.PrimaryPart
+    if not body then
+        log("ERROR: No Body found for walking")
+        return false
+    end
+
+    local startX = body.Position.X
+    local startY = body.Position.Y
+    local startZ = body.Position.Z
+
+    log("Walking " .. distance .. " studs...")
+
+    for i = 1, steps do
+        local progress = i / steps
+        local newX = startX + (distance * progress)
+
+        -- Bob up and down
+        local bobPhase = (i % 10) / 10 * math.pi * 2
+        local bobOffset = math.sin(bobPhase) * bobHeight
+        local newY = startY + bobOffset
+
+        body.Position = Vector3.new(newX, newY, startZ)
+        wait(stepDelay)
+    end
+
+    -- Settle at final Y
+    body.Position = Vector3.new(startX + distance, startY, startZ)
+    log("Walk complete! Final X=" .. (startX + distance))
+    return true
+end
+
+-- Create baby camel model
+function CamelSetup.createBabyCamel(position)
+    position = position or Vector3.new(0, 3, 0)
+    log("Creating baby camel at " .. tostring(position))
+
+    local CAMEL_COLOR = Color3.fromRGB(255, 140, 0)
+    local HOOF_COLOR = Color3.fromRGB(139, 90, 43)
+    local EYE_COLOR = Color3.fromRGB(20, 20, 20)
+
+    local camel = Instance.new("Model")
+    camel.Name = "BabyCamel"
+
+    -- Body
+    local body = Instance.new("Part")
+    body.Name = "Body"
+    body.Size = Vector3.new(3, 1.5, 2)
+    body.Position = position
+    body.Color = CAMEL_COLOR
+    body.Material = Enum.Material.Neon
+    body.Anchored = true
+    body.Parent = camel
+    camel.PrimaryPart = body
+
+    -- Head
+    local head = Instance.new("Part")
+    head.Name = "Head"
+    head.Shape = Enum.PartType.Ball
+    head.Size = Vector3.new(1.2, 1.2, 1.2)
+    head.Position = position + Vector3.new(2, 1, 0)
+    head.Color = CAMEL_COLOR
+    head.Material = Enum.Material.Neon
+    head.Anchored = false
+    head.Parent = camel
+
+    -- Weld head to body
+    local headWeld = Instance.new("WeldConstraint")
+    headWeld.Part0 = body
+    headWeld.Part1 = head
+    headWeld.Parent = head
+
+    -- Add more parts as needed...
+    log("Baby camel created with " .. #camel:GetChildren() .. " parts")
+    return camel
 end
 
 return CamelSetup

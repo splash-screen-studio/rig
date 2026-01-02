@@ -15,7 +15,7 @@ This document explains how Claude Code works with this 3D animation pipeline.
 | animate_baby_camel_walk.py | 1.0.0 | Walk cycle animation |
 | export_fbx.py | 1.1.0 | FBX export with auto-detect |
 | upload_to_roblox.py | 1.0.0 | Upload FBX + textures to Cloud |
-| CamelSetup.luau | 1.0.0 | MCP helper for SurfaceAppearance |
+| CamelSetup.luau | 1.1.0 | MCP helper with walk animation |
 | MCP Explorer | 1.0.0 | Workspace exploration via MCP |
 | Rojo Config | 1.0.0 | Default project structure |
 
@@ -393,38 +393,50 @@ mcp__roblox-studio__run_code    # Execute Luau code in Studio
 mcp__roblox-studio__insert_model # Insert marketplace models
 ```
 
-### Blender → Roblox Workflow (Automated)
+### Primary Workflow: Create Directly via MCP
 
-**One Command Deploy:**
-```bash
-./animate.sh deploy baby_camel
-# 1. Exports FBX
-# 2. Bakes PBR textures
-# 3. Uploads to Roblox Cloud
-# 4. Saves asset IDs to exports/baby_camel_assets.json
-```
+**MCP is the primary approach** - more reliable than Cloud upload, instant results, no timeouts.
 
-**Manual Steps (if needed):**
-```bash
-./animate.sh export baby_camel    # Export FBX only
-./animate.sh bake baby_camel      # Bake PBR textures only
-./animate.sh upload baby_camel    # Upload to Cloud only
-```
-
-**After Upload - Insert via MCP:**
 ```lua
--- Claude runs this after getting asset IDs from deploy
-local CamelSetup = require(game.ReplicatedStorage.Shared.CamelSetup)
+-- Claude creates models directly in Studio via MCP
+-- No FBX export, no Cloud upload, no manual steps!
 
--- Asset IDs from upload_to_roblox.py output
-local textures = {
-    ColorMap = "rbxassetid://123456",
-    NormalMap = "rbxassetid://123457",
-    RoughnessMap = "rbxassetid://123458"
-}
+local camel = Instance.new("Model")
+camel.Name = "BabyCamel"
 
--- Insert and setup with one call
-local model = CamelSetup.insertAndSetup("MODEL_ASSET_ID", textures, Vector3.new(0, 5, 0))
+local body = Instance.new("Part")
+body.Size = Vector3.new(3, 1.5, 2)
+body.Color = Color3.fromRGB(255, 140, 0)  -- Vibrant orange
+body.Material = Enum.Material.Neon        -- Glowing!
+body.Parent = camel
+
+-- ... create all parts via MCP
+camel.Parent = workspace
+```
+
+**Why MCP over Blender FBX:**
+- Instant - no upload timeouts
+- Reliable - no Cloud API issues
+- Controllable - adjust colors/sizes in real-time
+- Animated - direct position changes in loops
+
+**MCP Animation Caveat:**
+- ❌ `TweenService` does NOT work in MCP (Command Bar context doesn't update tweens)
+- ✅ Direct position changes in loops DO work
+```lua
+-- This works in MCP:
+for i = 1, 60 do
+    body.Position = Vector3.new(i * 0.1, 3, 0)
+    wait(0.05)
+end
+```
+
+### Legacy: Blender FBX Workflow (Optional)
+
+For complex organic models that need Blender's sculpting:
+```bash
+./animate.sh export baby_camel    # Export FBX
+# Then use Studio's File > Import 3D manually
 ```
 
 ### rbxcloud Commands

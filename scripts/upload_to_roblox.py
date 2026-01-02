@@ -157,6 +157,18 @@ def upload_workflow(scene_name, exports_dir, api_key, creator_id):
 
     return results
 
+def load_env_file(env_path=".env"):
+    """Load environment variables from .env file."""
+    env_vars = {}
+    if os.path.exists(env_path):
+        with open(env_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    env_vars[key.strip()] = value.strip()
+    return env_vars
+
 def main():
     print(f"=== Upload to Roblox v{VERSION} ===")
 
@@ -167,9 +179,10 @@ def main():
 
     args = parser.parse_args()
 
-    # Load env
-    api_key = os.environ.get("ROBLOX_API_KEY")
-    creator_id = os.environ.get("ROBLOX_CREATOR_ID", "5514421781")  # Default from .env
+    # Load env from file first, then check environment
+    env_file = load_env_file()
+    api_key = os.environ.get("ROBLOX_API_KEY") or env_file.get("ROBLOX_API_KEY")
+    creator_id = os.environ.get("ROBLOX_CREATOR_ID") or env_file.get("ROBLOX_CREATOR_ID", "5514421781")
 
     if not api_key:
         log("ERROR: ROBLOX_API_KEY not set")
