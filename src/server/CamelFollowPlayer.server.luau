@@ -1,5 +1,5 @@
 --[[
-    CamelFollowPlayer v1.3.1
+    CamelFollowPlayer v1.4.0
     Makes the baby camel follow the player, positioned ahead and to the left.
     Uses direct CFrame positioning (no physics - more stable).
     All dimensions calculated from actual camel geometry.
@@ -14,13 +14,44 @@
             Fixed partCount logging (# doesn't work on dictionaries)
     v1.3.4: FIX - Flipped rotation sign (was 180° backwards)
     v1.3.5: Increased offset multipliers (ahead: 1.5→2.5, left: 0.8→1.2)
+    v1.4.0: Dynamic terrain elevation - camel walks on undulating terrain
+            Uses TerrainConfig.getElevation(x, z) as single source of truth
+    v1.4.1: FIX - Set Y directly from terrain, don't lerp it
+            Lerping Y caused camel to sink underground on elevation changes
+    v1.4.2: FIX - Use raycast to find ACTUAL terrain surface
+            Math function doesn't match voxel grid exactly, raycast is single source of truth
 ]]
 
-local VERSION = "1.3.5"
+local VERSION = "1.4.2"
 print("[CamelFollowPlayer v" .. VERSION .. "] Script starting...")
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Wait for TerrainConfig module (for reference elevation range)
+local TerrainConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("TerrainConfig"))
+print("[CamelFollowPlayer v" .. VERSION .. "] TerrainConfig v" .. TerrainConfig.VERSION .. " loaded")
+
+-- v1.4.2: Raycast to find ACTUAL terrain surface (single source of truth)
+-- The mathematical getElevation() doesn't match voxel grid exactly
+local function getActualTerrainHeight(x, z)
+    local rayOrigin = Vector3.new(x, TerrainConfig.MAX_ELEVATION + 50, z)  -- Start above max terrain
+    local rayDirection = Vector3.new(0, -(TerrainConfig.ELEVATION_RANGE + 100), 0)  -- Ray down
+
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Include
+    raycastParams.FilterDescendantsInstances = {workspace.Terrain}
+
+    local result = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+
+    if result then
+        return result.Position.Y
+    else
+        -- Fallback to mathematical function if raycast fails
+        return TerrainConfig.getElevation(x, z)
+    end
+end
 
 -- Wait for camel
 local camel = workspace:WaitForChild("BabyCamel", 10)
@@ -79,7 +110,8 @@ end
 local OFFSET_FORWARD = camelHeight * 2.5   -- Ahead by 2.5x camel height (v1.3.5: was 1.5)
 local OFFSET_LEFT = camelHeight * 1.2      -- Left by 1.2x camel height (v1.3.5: was 0.8)
 local GROUND_CLEARANCE = 0.1               -- Small gap above ground
-local CAMEL_GROUND_HEIGHT = bodyToGround + GROUND_CLEARANCE  -- Where body should be for hooves on ground
+-- v1.4.0: Ground height now computed dynamically from TerrainConfig.getElevation()
+-- Formula: terrainY + bodyToGround + GROUND_CLEARANCE
 local LERP_SPEED = 0.1                     -- Smoothing factor
 local BOB_HEIGHT = camelHeight * 0.03      -- Bob 3% of height
 local BOB_SPEED = 8                        -- Cycles per second
@@ -87,7 +119,9 @@ local BOB_SPEED = 8                        -- Cycles per second
 print("[CamelFollowPlayer v" .. VERSION .. "] Calculated offsets:")
 print("  Forward: " .. string.format("%.2f", OFFSET_FORWARD))
 print("  Left: " .. string.format("%.2f", OFFSET_LEFT))
-print("  Ground height: " .. string.format("%.2f", CAMEL_GROUND_HEIGHT))
+print("  Body to ground: " .. string.format("%.2f", bodyToGround))
+print("  Ground clearance: " .. string.format("%.2f", GROUND_CLEARANCE))
+print("  Terrain elevation: DYNAMIC (from TerrainConfig)")
 
 -- Keep everything anchored (no physics!)
 body.Anchored = true
@@ -158,11 +192,18 @@ connection = RunService.Heartbeat:Connect(function(dt)
         + (lookVector * OFFSET_FORWARD)  -- ahead
         - (rightVector * OFFSET_LEFT)     -- to the left
 
-    -- Set height so hooves touch ground (calculated from geometry)
-    targetPos = Vector3.new(targetPos.X, CAMEL_GROUND_HEIGHT, targetPos.Z)
+    -- Smooth lerp X and Z only (horizontal movement)
+    local newXZ = Vector2.new(currentPos.X, currentPos.Z):Lerp(
+        Vector2.new(targetPos.X, targetPos.Z), LERP_SPEED
+    )
 
-    -- Smooth lerp to target
-    local newPos = currentPos:Lerp(targetPos, LERP_SPEED)
+    -- Set height DIRECTLY from terrain (no lerp - stay on surface!)
+    -- v1.4.2 FIX: Use raycast to find ACTUAL terrain surface (voxels don't match math exactly)
+    -- getActualTerrainHeight() is the SINGLE SOURCE OF TRUTH for terrain height
+    local terrainY = getActualTerrainHeight(newXZ.X, newXZ.Y)  -- Raycast at lerped X,Z position
+    local groundY = terrainY + bodyToGround + GROUND_CLEARANCE
+
+    local newPos = Vector3.new(newXZ.X, groundY, newXZ.Y)
 
     -- Calculate movement direction (for facing)
     local movement = newPos - previousPos
@@ -182,13 +223,12 @@ connection = RunService.Heartbeat:Connect(function(dt)
         -- Debug logging every interval
         if elapsed - lastDebugLog > debugLogInterval then
             lastDebugLog = elapsed
-            print("[CamelFollowPlayer v" .. VERSION .. "] FACING DEBUG:")
-            print("  movement vector: " .. string.format("(%.2f, %.2f, %.2f)", movement.X, movement.Y, movement.Z))
+            print("[CamelFollowPlayer v" .. VERSION .. "] DEBUG:")
+            print("  position: " .. string.format("(%.1f, %.1f, %.1f)", currentPos.X, currentPos.Y, currentPos.Z))
+            print("  terrainY: " .. string.format("%.2f", terrainY))
+            print("  groundY: " .. string.format("%.2f", groundY))
             print("  moveDistance: " .. string.format("%.3f", moveDistance))
-            print("  moveDirection (old method): " .. string.format("(%.2f, %.2f, %.2f)", moveDirection.X, moveDirection.Y, moveDirection.Z))
-            print("  playerFacing (new method): " .. string.format("(%.2f, %.2f, %.2f)", playerFacing.X, playerFacing.Y, playerFacing.Z))
-            print("  oldLookVector: " .. string.format("(%.2f, %.2f, %.2f)", oldLookVector.X, oldLookVector.Y, oldLookVector.Z))
-            print("  newLookVector: " .. string.format("(%.2f, %.2f, %.2f)", currentLookVector.X, currentLookVector.Y, currentLookVector.Z))
+            print("  playerFacing: " .. string.format("(%.2f, %.2f, %.2f)", playerFacing.X, playerFacing.Y, playerFacing.Z))
         end
     end
 
