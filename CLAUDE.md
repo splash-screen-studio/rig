@@ -15,7 +15,7 @@ This document explains how Claude Code works with this 3D animation pipeline.
 | animate_baby_camel_walk.py | 1.0.0 | Walk cycle animation |
 | export_fbx.py | 1.1.0 | FBX export with auto-detect |
 | upload_to_roblox.py | 1.0.0 | Upload FBX + textures to Cloud |
-| CamelSetup.luau | 1.1.0 | MCP helper with walk animation |
+| CamelSetup.luau | 1.2.0 | MCP walk - moves ALL parts together |
 | MCP Explorer | 1.0.0 | Workspace exploration via MCP |
 | Rojo Config | 1.0.0 | Default project structure |
 
@@ -420,14 +420,27 @@ camel.Parent = workspace
 - Controllable - adjust colors/sizes in real-time
 - Animated - direct position changes in loops
 
-**MCP Animation Caveat:**
-- ❌ `TweenService` does NOT work in MCP (Command Bar context doesn't update tweens)
-- ✅ Direct position changes in loops DO work
+**MCP Animation Caveats:**
+
+1. ❌ `TweenService` does NOT work (Command Bar doesn't update tweens)
+2. ❌ `WeldConstraints` don't follow when you set `Position` directly (bypasses physics)
+3. ✅ Must move ALL parts together in the loop
+
 ```lua
--- This works in MCP:
-for i = 1, 60 do
-    body.Position = Vector3.new(i * 0.1, 3, 0)
-    wait(0.05)
+-- WRONG: Only moves body, other parts left behind!
+body.Position = Vector3.new(10, 3, 0)
+
+-- CORRECT: Move ALL parts together
+local offsets = {}
+for _, part in ipairs(model:GetChildren()) do
+    if part:IsA("BasePart") and part ~= body then
+        offsets[part] = part.Position - body.Position
+    end
+end
+
+body.Position = newPos
+for part, offset in pairs(offsets) do
+    part.Position = newPos + offset
 end
 ```
 

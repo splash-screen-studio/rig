@@ -8,7 +8,7 @@
 ]]
 
 local CamelSetup = {}
-CamelSetup.VERSION = "1.1.0"
+CamelSetup.VERSION = "1.2.0"
 
 -- Log with version
 local function log(msg)
@@ -106,6 +106,7 @@ function CamelSetup.insertAndSetup(modelAssetId, textures, position)
 end
 
 -- Walk animation using direct position changes (MCP compatible)
+-- IMPORTANT: Must move ALL parts together - welds don't work with direct Position changes
 function CamelSetup.walk(model, distance, options)
     options = options or {}
     local steps = options.steps or 60
@@ -117,6 +118,16 @@ function CamelSetup.walk(model, distance, options)
         log("ERROR: No Body found for walking")
         return false
     end
+
+    -- Calculate relative offsets for ALL parts (welds don't work with Position changes!)
+    local partOffsets = {}
+    local bodyPos = body.Position
+    for _, part in ipairs(model:GetChildren()) do
+        if part:IsA("BasePart") and part ~= body then
+            partOffsets[part] = part.Position - bodyPos
+        end
+    end
+    log("Tracking " .. #partOffsets .. " parts relative to body")
 
     local startX = body.Position.X
     local startY = body.Position.Y
@@ -133,12 +144,25 @@ function CamelSetup.walk(model, distance, options)
         local bobOffset = math.sin(bobPhase) * bobHeight
         local newY = startY + bobOffset
 
-        body.Position = Vector3.new(newX, newY, startZ)
+        -- Move body
+        local newBodyPos = Vector3.new(newX, newY, startZ)
+        body.Position = newBodyPos
+
+        -- Move ALL other parts maintaining offset (P0 bug fix!)
+        for part, offset in pairs(partOffsets) do
+            part.Position = newBodyPos + offset
+        end
+
         wait(stepDelay)
     end
 
     -- Settle at final Y
-    body.Position = Vector3.new(startX + distance, startY, startZ)
+    local finalBodyPos = Vector3.new(startX + distance, startY, startZ)
+    body.Position = finalBodyPos
+    for part, offset in pairs(partOffsets) do
+        part.Position = finalBodyPos + offset
+    end
+
     log("Walk complete! Final X=" .. (startX + distance))
     return true
 end
