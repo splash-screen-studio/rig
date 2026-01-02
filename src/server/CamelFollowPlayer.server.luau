@@ -13,9 +13,10 @@
             Camel's head is at +X (not -Z), calculate rotation offset from head position
             Fixed partCount logging (# doesn't work on dictionaries)
     v1.3.4: FIX - Flipped rotation sign (was 180° backwards)
+    v1.3.5: Increased offset multipliers (ahead: 1.5→2.5, left: 0.8→1.2)
 ]]
 
-local VERSION = "1.3.4"
+local VERSION = "1.3.5"
 print("[CamelFollowPlayer v" .. VERSION .. "] Script starting...")
 
 local Players = game:GetService("Players")
@@ -74,9 +75,9 @@ if head then
     print("  Head offset from body: " .. tostring(head.Position - body.Position))
 end
 
--- Configuration - based on camel size
-local OFFSET_FORWARD = camelHeight * 1.5   -- Ahead by 1.5x camel height
-local OFFSET_LEFT = camelHeight * 0.8      -- Left by 0.8x camel height
+-- Configuration - based on camel size (single source of truth)
+local OFFSET_FORWARD = camelHeight * 2.5   -- Ahead by 2.5x camel height (v1.3.5: was 1.5)
+local OFFSET_LEFT = camelHeight * 1.2      -- Left by 1.2x camel height (v1.3.5: was 0.8)
 local GROUND_CLEARANCE = 0.1               -- Small gap above ground
 local CAMEL_GROUND_HEIGHT = bodyToGround + GROUND_CLEARANCE  -- Where body should be for hooves on ground
 local LERP_SPEED = 0.1                     -- Smoothing factor
